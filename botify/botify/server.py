@@ -137,7 +137,6 @@ class Hello(Resource):
             "message": "welcome to botify, the best toy music recommender",
         }
 
-
 class Track(Resource):
     def get(self, track: int):
         data = tracks_redis.get(track)
@@ -162,7 +161,34 @@ class NextTrack(Resource):
         else:
             recommender = random_recommender
 
-        recommendation = recommender.recommend_next(user, args.track, args.time)
+        try:
+            recommendation = recommender.recommend_next(user, args.track, args.time)
+        except Exception:
+            app.logger.exception(
+                f"recommend_next failed for user={user}, track={args.track}, time={args.time}"
+            )
+            recommendation = None
+
+        if recommendation is None:
+            try:
+                recommendation = sasrec_i2i_recommender.recommend_next(
+                    user, args.track, args.time
+                )
+            except Exception:
+                recommendation = None
+
+        if recommendation is None:
+            try:
+                recommendation = random_recommender.recommend_next(
+                    user, args.track, args.time
+                )
+            except Exception:
+                recommendation = None
+
+        if recommendation is None:
+            recommendation = 0
+
+        recommendation = int(recommendation)
 
         data_logger.log(
             "next",
@@ -177,8 +203,6 @@ class NextTrack(Resource):
             experiments={"HSTU": treatment.name},
         )
         return {"user": user, "track": recommendation}
-
-
 class LastTrack(Resource):
     def post(self, user: int):
         start = time.time()
